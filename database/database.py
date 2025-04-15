@@ -2,15 +2,16 @@ import logging
 from pymongo import MongoClient
 from config import MONGO_URI, DEFAULT_EARNINGS_MMK, REFERRAL_THRESHOLD
 from datetime import datetime, timedelta
+from motor.motor_asyncio import AsyncIOMotorClient
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class Database:
     def __init__(self):
-        self.client = MongoClient(MONGO_URI)
-        # Explicitly specify the database name (e.g., "telegram_bot_db")
-        self.db = self.client["actit"]
+        # Use Motor for async MongoDB operations
+        self.client = AsyncIOMotorClient(MONGO_URI)
+        self.db = self.client["telegram_bot_db"]
         self.users = self.db.users
         self.banned_users = self.db.banned_users
 
@@ -26,18 +27,23 @@ class Database:
             }
             if referral_id:
                 user["referred_by"] = int(referral_id)
-            await self.users.insert_one(user)
-            logger.info(f"Added user {user_id} to database")
+            result = await self.users.insert_one(user)
+            logger.info(f"Added user {user_id} to database with ID {result.inserted_id}")
         except Exception as e:
             logger.error(f"Error adding user {user_id}: {e}")
+            raise
 
     async def get_user(self, user_id):
         try:
             user = await self.users.find_one({"user_id": user_id})
+            if user:
+                logger.info(f"Fetched user {user_id}: {user}")
+            else:
+                logger.warning(f"User {user_id} not found in database")
             return user
         except Exception as e:
             logger.error(f"Error fetching user {user_id}: {e}")
-            return None
+            raise
 
     async def update_referrals(self, referrer_id):
         try:
@@ -59,6 +65,7 @@ class Database:
             logger.info(f"Updated earnings for {referrer_id} to {earnings} MMK for {new_referrals} referrals")
         except Exception as e:
             logger.error(f"Error updating referrals for {referrer_id}: {e}")
+            raise
 
     async def update_earnings(self, user_id, amount):
         try:
@@ -74,6 +81,7 @@ class Database:
             logger.info(f"Updated earnings for {user_id} to {new_earnings} MMK")
         except Exception as e:
             logger.error(f"Error updating earnings for {user_id}: {e}")
+            raise
 
     async def set_vip(self, user_id, is_vip):
         try:
@@ -84,22 +92,25 @@ class Database:
             logger.info(f"Set VIP status for {user_id} to {is_vip}")
         except Exception as e:
             logger.error(f"Error setting VIP for {user_id}: {e}")
+            raise
 
     async def get_stats(self):
         try:
             count = await self.users.count_documents({})
+            logger.info(f"Total users in database: {count}")
             return count
         except Exception as e:
             logger.error(f"Error fetching stats: {e}")
-            return 0
+            raise
 
     async def get_all_users(self):
         try:
             users = await self.users.find().to_list(None)
+            logger.info(f"Fetched {len(users)} users from database")
             return users
         except Exception as e:
             logger.error(f"Error fetching all users: {e}")
-            return []
+            raise
 
     async def ban_user(self, user_id, reason, duration):
         try:
@@ -113,6 +124,7 @@ class Database:
             logger.info(f"Banned user {user_id} for {duration} days")
         except Exception as e:
             logger.error(f"Error banning user {user_id}: {e}")
+            raise
 
     async def unban_user(self, user_id):
         try:
@@ -120,6 +132,7 @@ class Database:
             logger.info(f"Unbanned user {user_id}")
         except Exception as e:
             logger.error(f"Error unbanning user {user_id}: {e}")
+            raise
 
     async def get_banned_users(self):
         try:
@@ -129,7 +142,8 @@ class Database:
             for user in banned_users:
                 if user["banned_until"] <= current_time:
                     await self.banned_users.delete_one({"user_id": user["user_id"]})
+            logger.info(f"Fetched {len(active_bans)} active banned users")
             return active_bans
         except Exception as e:
             logger.error(f"Error fetching banned users: {e}")
-            return []
+            raise
