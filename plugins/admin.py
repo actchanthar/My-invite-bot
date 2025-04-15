@@ -98,3 +98,24 @@ async def handle_set_vip(client, message):
     except Exception as e:
         logger.error(f"Error in set_vip command: {e}")
         await message.reply("Error setting VIP status.")
+
+async def handle_add_bonus(client, message):
+    try:
+        if len(message.command) < 3:
+            await message.reply("Usage: /add_bonus <user_id> <amount>")
+            return
+        user_id = int(message.command[1])
+        amount = int(message.command[2])
+        if amount <= 0:
+            await message.reply("Bonus amount must be greater than 0.")
+            return
+        user = await db.get_user(user_id)
+        if not user:
+            await message.reply(f"User {user_id} not found.")
+            return
+        await db.update_earnings(user_id, amount)
+        await client.send_message(user_id, f"You received a bonus of {amount} MMK!")
+        await message.reply(f"Added {amount} MMK bonus to user {user_id}.")
+    except Exception as e:
+        logger.error(f"Error in add_bonus command: {e}")
+        await message.reply("Error adding bonus.")
