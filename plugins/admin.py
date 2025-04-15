@@ -9,10 +9,11 @@ db = Database()
 async def handle_stats(client, message):
     try:
         total_users = await db.get_stats()
+        logger.info(f"Stats command: Total users = {total_users}")
         await message.reply(f"Total users: {total_users}")
     except Exception as e:
         logger.error(f"Error in stats command: {e}")
-        await message.reply("Error fetching stats.")
+        await message.reply("Error fetching stats. Please try again later.")
 
 async def handle_broadcast(client, message):
     try:
@@ -21,15 +22,17 @@ async def handle_broadcast(client, message):
             return
         broadcast_msg = " ".join(message.command[1:])
         users = await db.get_all_users()
+        logger.info(f"Broadcasting to {len(users)} users")
         for user in users:
             try:
                 await client.send_message(user["user_id"], broadcast_msg)
+                logger.info(f"Sent broadcast to {user['user_id']}")
             except Exception as e:
                 logger.error(f"Error broadcasting to {user['user_id']}: {e}")
         await message.reply("Broadcast sent successfully.")
     except Exception as e:
         logger.error(f"Error in broadcast command: {e}")
-        await message.reply("Error sending broadcast.")
+        await message.reply("Error sending broadcast. Please try again later.")
 
 async def handle_ban_user(client, message):
     try:
@@ -43,7 +46,7 @@ async def handle_ban_user(client, message):
         await message.reply(f"User {user_id} banned for {duration} days. Reason: {reason}")
     except Exception as e:
         logger.error(f"Error in ban_user command: {e}")
-        await message.reply("Error banning user.")
+        await message.reply("Error banning user. Please try again later.")
 
 async def handle_unban_user(client, message):
     try:
@@ -55,7 +58,7 @@ async def handle_unban_user(client, message):
         await message.reply(f"User {user_id} unbanned.")
     except Exception as e:
         logger.error(f"Error in unban_user command: {e}")
-        await message.reply("Error unbanning user.")
+        await message.reply("Error unbanning user. Please try again later.")
 
 async def handle_banned_users(client, message):
     try:
@@ -69,13 +72,14 @@ async def handle_banned_users(client, message):
         await message.reply(response)
     except Exception as e:
         logger.error(f"Error in banned_users command: {e}")
-        await message.reply("Error fetching banned users.")
+        await message.reply("Error fetching banned users. Please try again later.")
 
 async def handle_users(client, message):
     try:
         users = await db.get_all_users()
+        logger.info(f"Users command: Found {len(users)} users")
         if not users:
-            await message.reply("No users found.")
+            await message.reply("No users found in the database.")
             return
         response = "Users:\n"
         for user in users:
@@ -83,7 +87,7 @@ async def handle_users(client, message):
         await message.reply(response)
     except Exception as e:
         logger.error(f"Error in users command: {e}")
-        await message.reply("Error fetching users.")
+        await message.reply("Error fetching users. Please try again later.")
 
 async def handle_set_vip(client, message):
     try:
@@ -97,7 +101,7 @@ async def handle_set_vip(client, message):
         await message.reply(f"User {user_id} set to {status}.")
     except Exception as e:
         logger.error(f"Error in set_vip command: {e}")
-        await message.reply("Error setting VIP status.")
+        await message.reply("Error setting VIP status. Please try again later.")
 
 async def handle_add_bonus(client, message):
     try:
@@ -118,4 +122,4 @@ async def handle_add_bonus(client, message):
         await message.reply(f"Added {amount} MMK bonus to user {user_id}.")
     except Exception as e:
         logger.error(f"Error in add_bonus command: {e}")
-        await message.reply("Error adding bonus.")
+        await message.reply("Error adding bonus. Please try again later.")
