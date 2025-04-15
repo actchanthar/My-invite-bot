@@ -12,8 +12,8 @@ db = Database()
 async def handle_withdraw(client, message):
     try:
         user = await db.get_user(message.from_user.id)
-        if not user or user["earnings_mmk"] < 50000:
-            await message.reply("You need at least 50,000 MMK to withdraw!")
+        if not user or user["earnings_mmk"] < 50:
+            await message.reply("You need at least 50 MMK to withdraw!")
             return
         buttons = [
             [InlineKeyboardButton("KBZ Pay", callback_data="withdraw_kbz")],
@@ -30,8 +30,8 @@ async def handle_withdraw(client, message):
 async def handle_withdraw_callback(client, callback_query):
     try:
         user = await db.get_user(callback_query.from_user.id)
-        if not user or user["earnings_mmk"] < 50000:
-            await callback_query.message.reply("You need at least 50,000 MMK to withdraw!")
+        if not user or user["earnings_mmk"] < 50:
+            await callback_query.message.reply("You need at least 50 MMK to withdraw!")
             await callback_query.answer()
             return
         buttons = [
