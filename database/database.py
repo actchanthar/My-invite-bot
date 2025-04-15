@@ -1,6 +1,7 @@
 import logging
 from pymongo import MongoClient
-from config import MONGO_URI, MONGO_DB_NAME, REFERRAL_THRESHOLD, DEFAULT_EARNINGS_MMK
+from config import MONGO_URI, DEFAULT_EARNINGS_MMK, REFERRAL_THRESHOLD
+from datetime import datetime, timedelta
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -8,79 +9,84 @@ logger = logging.getLogger(__name__)
 class Database:
     def __init__(self):
         self.client = MongoClient(MONGO_URI)
-        self.db = self.client[MONGO_DB_NAME]
+        self.db = self.client.get_database()
         self.users = self.db.users
         self.banned_users = self.db.banned_users
 
     async def add_user(self, user_id, username, referral_id=None):
-        user_data = {
-            "user_id": user_id,
-            "username": username,
-            "referrals": 0,
-            "earnings_mmk": 0,
-            "referral_id": referral_id,
-            "is_vip": False
-        }
         try:
-            result = self.users.update_one({"user_id": user_id}, {"$setOnInsert": user_data}, upsert=True)
-            logger.info(f"Added/updated user {user_id} with referral_id {referral_id}")
-            return result
+            user = {
+                "user_id": user_id,
+                "username": username,
+                "referrals": 0,
+                "earnings_mmk": 0,
+                "is_vip": False,
+                "joined_at": datetime.utcnow()
+            }
+            if referral_id:
+                user["referred_by"] = int(referral_id)
+            await self.users.insert_one(user)
+            logger.info(f"Added user {user_id} to database")
         except Exception as e:
             logger.error(f"Error adding user {user_id}: {e}")
-            return None
-
-    async def update_referrals(self, referral_id):
-        try:
-            user = self.users.find_one({"user_id": referral_id})
-            if user:
-                self.users.update_one({"user_id": referral_id}, {"$inc": {"referrals": 1}})
-                logger.info(f"Incremented referrals for user {referral_id}: {user['referrals'] + 1}")
-                if user["referrals"] + 1 >= REFERRAL_THRESHOLD:
-                    earnings = DEFAULT_EARNINGS_MMK * 2 if user["is_vip"] else DEFAULT_EARNINGS_MMK
-                    self.users.update_one({"user_id": referral_id}, {"$inc": {"earnings_mmk": earnings}})
-                    logger.info(f"User {referral_id} earned {earnings} MMK for {REFERRAL_THRESHOLD} referrals")
-            else:
-                logger.warning(f"Referral user {referral_id} not found")
-        except Exception as e:
-            logger.error(f"Error updating referrals for {referral_id}: {e}")
 
     async def get_user(self, user_id):
         try:
-            user = self.users.find_one({"user_id": user_id})
+            user = await self.users.find_one({"user_id": user_id})
             return user
         except Exception as e:
             logger.error(f"Error fetching user {user_id}: {e}")
             return None
 
-    async def ban_user(self, user_id, reason, duration):
+    async def update_referrals(self, referrer_id):
         try:
-            self.banned_users.update_one(
-                {"user_id": user_id},
-                {"$set": {"reason": reason, "duration": duration}},
-                upsert=True
+            referrer = await self.users.find_one({"user_id": referrer_id})
+            if not referrer:
+                logger.warning(f"Referrer {referrer_id} not found")
+                return
+            new_referrals = referrer.get("referrals", 0) + 1
+            await self.users.update_one(
+                {"user_id": referrer_id},
+                {"$set": {"referrals": new_referrals}}
             )
-            logger.info(f"Banned user {user_id} for {duration} days: {reason}")
+            # Award earnings for each referral, since REFERRAL_THRESHOLD is now 1
+            earnings = referrer.get("earnings_mmk", 0) + DEFAULT_EARNINGS_MMK
+            await self.users.update_one(
+                {"user_id": referrer_id},
+                {"$set": {"earnings_mmk": earnings}}
+            )
+            logger.info(f"Updated earnings for {referrer_id} to {earnings} MMK for {new_referrals} referrals")
         except Exception as e:
-            logger.error(f"Error banning user {user_id}: {e}")
+            logger.error(f"Error updating referrals for {referrer_id}: {e}")
 
-    async def unban_user(self, user_id):
+    async def update_earnings(self, user_id, amount):
         try:
-            self.banned_users.delete_one({"user_id": user_id})
-            logger.info(f"Unbanned user {user_id}")
+            user = await self.users.find_one({"user_id": user_id})
+            if not user:
+                logger.warning(f"User {user_id} not found")
+                return
+            new_earnings = max(0, user.get("earnings_mmk", 0) + amount)
+            await self.users.update_one(
+                {"user_id": user_id},
+                {"$set": {"earnings_mmk": new_earnings}}
+            )
+            logger.info(f"Updated earnings for {user_id} to {new_earnings} MMK")
         except Exception as e:
-            logger.error(f"Error unbanning user {user_id}: {e}")
+            logger.error(f"Error updating earnings for {user_id}: {e}")
 
-    async def get_banned_users(self):
+    async def set_vip(self, user_id, is_vip):
         try:
-            return list(self.banned_users.find())
+            await self.users.update_one(
+                {"user_id": user_id},
+                {"$set": {"is_vip": is_vip}}
+            )
+            logger.info(f"Set VIP status for {user_id} to {is_vip}")
         except Exception as e:
-            logger.error(f"Error fetching banned users: {e}")
-            return []
+            logger.error(f"Error setting VIP for {user_id}: {e}")
 
     async def get_stats(self):
         try:
-            count = self.users.count_documents({})
-            logger.info(f"Retrieved stats: {count} users")
+            count = await self.users.count_documents({})
             return count
         except Exception as e:
             logger.error(f"Error fetching stats: {e}")
@@ -88,23 +94,41 @@ class Database:
 
     async def get_all_users(self):
         try:
-            users = list(self.users.find())
-            logger.info(f"Retrieved {len(users)} users")
+            users = await self.users.find().to_list(None)
             return users
         except Exception as e:
             logger.error(f"Error fetching all users: {e}")
             return []
 
-    async def update_earnings(self, user_id, amount_mmk):
+    async def ban_user(self, user_id, reason, duration):
         try:
-            self.users.update_one({"user_id": user_id}, {"$inc": {"earnings_mmk": amount_mmk}})
-            logger.info(f"Updated earnings for user {user_id}: {amount_mmk} MMK")
+            ban_until = datetime.utcnow() + timedelta(days=duration)
+            await self.banned_users.insert_one({
+                "user_id": user_id,
+                "reason": reason,
+                "duration": duration,
+                "banned_until": ban_until
+            })
+            logger.info(f"Banned user {user_id} for {duration} days")
         except Exception as e:
-            logger.error(f"Error updating earnings for {user_id}: {e}")
+            logger.error(f"Error banning user {user_id}: {e}")
 
-    async def set_vip(self, user_id, is_vip):
+    async def unban_user(self, user_id):
         try:
-            self.users.update_one({"user_id": user_id}, {"$set": {"is_vip": is_vip}})
-            logger.info(f"Set VIP status for user {user_id} to {is_vip}")
+            await self.banned_users.delete_one({"user_id": user_id})
+            logger.info(f"Unbanned user {user_id}")
         except Exception as e:
-            logger.error(f"Error setting VIP for {user_id}: {e}")
+            logger.error(f"Error unbanning user {user_id}: {e}")
+
+    async def get_banned_users(self):
+        try:
+            current_time = datetime.utcnow()
+            banned_users = await self.banned_users.find().to_list(None)
+            active_bans = [user for user in banned_users if user["banned_until"] > current_time]
+            for user in banned_users:
+                if user["banned_until"] <= current_time:
+                    await self.banned_users.delete_one({"user_id": user["user_id"]})
+            return active_bans
+        except Exception as e:
+            logger.error(f"Error fetching banned users: {e}")
+            return []
