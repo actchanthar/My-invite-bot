@@ -9,7 +9,8 @@ logger = logging.getLogger(__name__)
 class Database:
     def __init__(self):
         self.client = MongoClient(MONGO_URI)
-        self.db = self.client.get_database()
+        # Explicitly specify the database name (e.g., "telegram_bot_db")
+        self.db = self.client["telegram_bot_db"]
         self.users = self.db.users
         self.banned_users = self.db.banned_users
 
