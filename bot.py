@@ -110,6 +110,12 @@ async def set_vip_command(client, message):
     logger.info(f"Set VIP command from admin {message.from_user.id}")
     await handle_set_vip(client, message)
 
+@app.on_message(filters.command("add_bonus") & filters.user(ADMIN_IDS))
+async def add_bonus_command(client, message):
+    from plugins.admin import handle_add_bonus
+    logger.info(f"Add bonus command from admin {message.from_user.id}")
+    await handle_add_bonus(client, message)
+
 @app.on_message(filters.command("profile"))
 async def profile_command(client, message):
     from plugins.referral import handle_profile
