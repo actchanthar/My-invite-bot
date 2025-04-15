@@ -49,7 +49,7 @@ async def handle_start(client, message):
                 buttons.append([InlineKeyboardButton(f"Join {chat.title or 'Channel'}", url=f"https://t.me/{invite_link}")])
         buttons.append([InlineKeyboardButton("Check Subscription", callback_data="check_sub")])
         await message.reply_photo(
-            photo="https://example.com/welcome.jpg",
+            photo="https://i.imghippo.com/files/fgmj5944fE.jpg",
             caption="Please join all required channels to use the bot!",
             reply_markup=InlineKeyboardMarkup(buttons)
         )
