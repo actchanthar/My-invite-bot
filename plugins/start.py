@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from config import FORCE_SUB_CHANNELS
@@ -28,15 +29,26 @@ async def check_subscription(client, user_id):
         if not channel_id:
             logger.warning(f"Skipping invalid channel: {channel}")
             continue
-        try:
-            member = await client.get_chat_member(channel_id, user_id)
-            if member.status not in ["member", "administrator", "creator"]:
-                logger.info(f"User {user_id} not subscribed to {channel_id}")
+        for attempt in range(2):  # Retry once if needed
+            try:
+                member = await client.get_chat_member(channel_id, user_id)
+                logger.info(f"User {user_id} status in {channel_id}: {member.status}")
+                if member.status in ["member", "administrator", "creator"]:
+                    logger.info(f"User {user_id} is subscribed to {channel_id}")
+                    return True
+                # Fallback: Check if user is admin explicitly
+                chat = await client.get_chat(channel_id)
+                if chat.permissions and user_id in [admin.user.id for admin in await client.get_chat_members(channel_id, filter="administrators")]:
+                    logger.info(f"User {user_id} is an admin in {channel_id}, bypassing subscription check")
+                    return True
+                logger.info(f"User {user_id} not subscribed to {channel_id} (status: {member.status})")
                 return False
-            logger.info(f"User {user_id} is subscribed to {channel_id}")
-        except Exception as e:
-            logger.error(f"Error checking subscription for {channel_id}: {e}")
-            return False
+            except Exception as e:
+                logger.error(f"Attempt {attempt + 1} failed for {channel_id}: {e}")
+                if attempt == 1:
+                    logger.error(f"Final attempt failed for {channel_id}, assuming not subscribed")
+                    return False
+                await asyncio.sleep(1)  # Wait before retrying
     return True
 
 async def handle_start(client, message):
@@ -95,7 +107,9 @@ async def check_sub_callback(client, callback_query):
     user_id = callback_query.from_user.id
     logger.info(f"Checking subscription for user {user_id} via callback")
     if await check_subscription(client, user_id):
+        logger.info(f"User {user_id} passed subscription check")
         await callback_query.message.delete()
         await handle_start(client, callback_query.message)
     else:
+        logger.info(f"User {user_id} failed subscription check")
         await callback_query.answer("You haven't joined all channels yet!")
