@@ -5,8 +5,22 @@ from database.database import Database
 
 db = Database()
 
+async def resolve_channel_id(client, channel):
+    """Resolve a channel username or ID to a chat ID."""
+    try:
+        if isinstance(channel, str) and channel.startswith("@"):
+            chat = await client.get_chat(channel)
+            return chat.id
+        return int(channel)  # Assume it's already a chat ID
+    except Exception as e:
+        print(f"Error resolving channel {channel}: {e}")
+        return None
+
 async def check_subscription(client, user_id):
-    for channel_id in FORCE_SUB_CHANNELS:
+    for channel in FORCE_SUB_CHANNELS:
+        channel_id = await resolve_channel_id(client, channel)
+        if not channel_id:
+            continue
         try:
             member = await client.get_chat_member(channel_id, user_id)
             if member.status not in ["member", "administrator", "creator"]:
@@ -26,7 +40,13 @@ async def handle_start(client, message):
             await db.update_referrals(int(referral_id))
 
     if not await check_subscription(client, user_id):
-        buttons = [[InlineKeyboardButton(f"Join Channel {i+1}", url=f"https://t.me/{(await client.get_chat(channel_id)).username}")] for i, channel_id in enumerate(FORCE_SUB_CHANNELS)]
+        buttons = []
+        for channel in FORCE_SUB_CHANNELS:
+            channel_id = await resolve_channel_id(client, channel)
+            if channel_id:
+                chat = await client.get_chat(channel_id)
+                invite_link = chat.username if chat.username else f"https://t.me/c/{str(channel_id)[4:]}"
+                buttons.append([InlineKeyboardButton(f"Join {chat.title or 'Channel'}", url=f"https://t.me/{invite_link}")])
         buttons.append([InlineKeyboardButton("Check Subscription", callback_data="check_sub")])
         await message.reply_photo(
             photo="https://example.com/welcome.jpg",
@@ -45,11 +65,3 @@ async def handle_start(client, message):
         caption=f"Welcome, @{username}!\nUse the buttons below to navigate.",
         reply_markup=InlineKeyboardMarkup(buttons)
     )
-
-@app.on_callback_query(filters.regex("check_sub"))
-async def check_sub_callback(client, callback_query):
-    if await check_subscription(client, callback_query.from_user.id):
-        await callback_query.message.delete()
-        await handle_start(client, callback_query.message)
-    else:
-        await callback_query.answer("You haven't joined all channels yet!")
