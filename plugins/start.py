@@ -2,6 +2,7 @@ import logging
 import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.enums import ChatMemberStatus
 from config import FORCE_SUB_CHANNELS
 from database.database import Database
 
@@ -33,15 +34,16 @@ async def check_subscription(client, user_id):
             try:
                 member = await client.get_chat_member(channel_id, user_id)
                 logger.info(f"User {user_id} status in {channel_id}: {member.status}")
-                if member.status in ["member", "administrator", "creator"]:
+                # Check using ChatMemberStatus enum
+                if member.status in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER]:
                     logger.info(f"User {user_id} is subscribed to {channel_id}")
-                    return True
-                # Fallback: Check if user is admin explicitly
-                chat = await client.get_chat(channel_id)
-                if chat.permissions and user_id in [admin.user.id for admin in await client.get_chat_members(channel_id, filter="administrators")]:
-                    logger.info(f"User {user_id} is an admin in {channel_id}, bypassing subscription check")
-                    return True
+                    break
                 logger.info(f"User {user_id} not subscribed to {channel_id} (status: {member.status})")
+                # Fallback: Check if user is admin
+                admins = await client.get_chat_members(channel_id, filter="administrators")
+                if any(admin.user.id == user_id for admin in admins):
+                    logger.info(f"User {user_id} is an admin in {channel_id}, bypassing subscription check")
+                    break
                 return False
             except Exception as e:
                 logger.error(f"Attempt {attempt + 1} failed for {channel_id}: {e}")
