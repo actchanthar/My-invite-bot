@@ -29,11 +29,23 @@ async def check_sub_callback(client, callback_query):
         logger.info(f"User {user_id} failed subscription check")
         await callback_query.answer("You haven't joined all channels yet!")
 
+@app.on_callback_query(filters.regex("profile"))
+async def profile_callback(client, callback_query):
+    from plugins.referral import handle_profile_callback
+    logger.info(f"Profile callback from user {callback_query.from_user.id}")
+    await handle_profile_callback(client, callback_query)
+
 @app.on_callback_query(filters.regex("invite"))
 async def invite_callback(client, callback_query):
     from plugins.referral import invite_callback
     logger.info(f"Invite callback from user {callback_query.from_user.id}")
     await invite_callback(client, callback_query)
+
+@app.on_callback_query(filters.regex("withdraw"))
+async def withdraw_callback(client, callback_query):
+    from plugins.withdrawal import handle_withdraw_callback
+    logger.info(f"Withdraw callback from user {callback_query.from_user.id}")
+    await handle_withdraw_callback(client, callback_query)
 
 @app.on_callback_query(filters.regex("withdraw_(kbz|wave)"))
 async def withdraw_method_callback(client, callback_query):
@@ -92,17 +104,23 @@ async def users_command(client, message):
     logger.info(f"Users command from admin {message.from_user.id}")
     await handle_users(client, message)
 
-@app.on_message(filters.command("withdraw"))
-async def withdraw_command(client, message):
-    from plugins.withdrawal import handle_withdraw
-    logger.info(f"Withdraw command from user {message.from_user.id}")
-    await handle_withdraw(client, message)
+@app.on_message(filters.command("set_vip") & filters.user(ADMIN_IDS))
+async def set_vip_command(client, message):
+    from plugins.admin import handle_set_vip
+    logger.info(f"Set VIP command from admin {message.from_user.id}")
+    await handle_set_vip(client, message)
 
 @app.on_message(filters.command("profile"))
 async def profile_command(client, message):
     from plugins.referral import handle_profile
     logger.info(f"Profile command from user {message.from_user.id}")
     await handle_profile(client, message)
+
+@app.on_message(filters.command("withdraw"))
+async def withdraw_command(client, message):
+    from plugins.withdrawal import handle_withdraw
+    logger.info(f"Withdraw command from user {message.from_user.id}")
+    await handle_withdraw(client, message)
 
 if __name__ == "__main__":
     logger.info("Starting bot...")
