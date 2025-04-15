@@ -13,6 +13,15 @@ async def start_command(client, message):
     from plugins.start import handle_start
     await handle_start(client, message)
 
+@app.on_callback_query(filters.regex("check_sub"))
+async def check_sub_callback(client, callback_query):
+    from plugins.start import check_subscription, handle_start
+    if await check_subscription(client, callback_query.from_user.id):
+        await callback_query.message.delete()
+        await handle_start(client, callback_query.message)
+    else:
+        await callback_query.answer("You haven't joined all channels yet!")
+
 @app.on_message(filters.command("stats") & filters.user(ADMIN_IDS))
 async def stats_command(client, message):
     from plugins.admin import handle_stats
