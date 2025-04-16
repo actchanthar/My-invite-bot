@@ -30,12 +30,14 @@ async def check_subscription(client, user_id):
             continue
         try:
             member = await client.get_chat_member(channel_id, user_id)
-            if member.status not in ["member", "administrator", "creator"]:
-                logger.info(f"User {user_id} not subscribed to {channel_id}")
+            # Include 'restricted' status to handle cases where users are in the channel but restricted
+            if member.status not in ["member", "administrator", "creator", "restricted"]:
+                logger.info(f"User {user_id} not subscribed to {channel_id}, status: {member.status}")
                 return False
-            logger.info(f"User {user_id} is subscribed to {channel_id}")
+            logger.info(f"User {user_id} is subscribed to {channel_id}, status: {member.status}")
         except Exception as e:
             logger.error(f"Error checking subscription for {channel_id}: {e}")
+            # If there's an error (e.g., bot lacks permissions), assume user is not subscribed
             return False
     return True
 
@@ -96,6 +98,10 @@ async def check_sub_callback(client, callback_query):
     logger.info(f"Checking subscription for user {user_id} via callback")
     if await check_subscription(client, user_id):
         await callback_query.message.delete()
-        await handle_start(client, callback_query.message)
+        # Create a new message object to pass to handle_start
+        message = callback_query.message
+        message.from_user.id = user_id
+        message.command = ["start"]
+        await handle_start(client, message)
     else:
         await callback_query.answer("You haven't joined all channels yet!")
