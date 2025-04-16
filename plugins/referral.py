@@ -8,6 +8,38 @@ logger = logging.getLogger(__name__)
 
 db = Database()
 
+async def handle_profile(client, message):
+    try:
+        user_id = message.from_user.id
+        user = await db.get_user(user_id)
+        if not user:
+            await message.reply("User not found!")
+            return
+
+        # Construct the profile message
+        profile_message = (
+            f"**Your Profile**\n\n"
+            f"User ID: {user['user_id']}\n"
+            f"Username: @{user['username']}\n"
+            f"Referrals: {user['referrals']}\n"
+            f"Earnings: {user['earnings_mmk']} MMK\n"
+            f"VIP Status: {'Yes' if user['is_vip'] else 'No'}\n"
+            f"Joined: {user['joined_at'].strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+
+        # Add a "Back" button to return to the main menu
+        buttons = [
+            [InlineKeyboardButton("Back", callback_data="back_to_menu")]
+        ]
+
+        await message.reply(
+            profile_message,
+            reply_markup=InlineKeyboardMarkup(buttons)
+        )
+    except Exception as e:
+        logger.error(f"Error in profile command for user {user_id}: {e}")
+        await message.reply("Error retrieving your profile. Please try again later.")
+
 async def handle_profile_callback(client, callback_query):
     try:
         user_id = callback_query.from_user.id
@@ -42,7 +74,7 @@ async def handle_profile_callback(client, callback_query):
         logger.error(f"Error in profile callback for user {user_id}: {e}")
         await callback_query.message.reply("Error retrieving your profile. Please try again later.")
 
-async def handle_invite_callback(client, callback_query):
+async def invite_callback(client, callback_query):
     try:
         user_id = callback_query.from_user.id
         user = await db.get_user(user_id)
