@@ -10,6 +10,9 @@ logger = logging.getLogger(__name__)
 
 db = Database()
 
+# URL for the start image (replace with your actual image URL)
+START_IMAGE_URL = "https://i.imghippo.com/files/fgmj5944fE.jpg"
+
 async def check_subscription(client, user_id):
     for channel in FORCE_SUB_CHANNELS:
         try:
@@ -65,13 +68,16 @@ async def handle_start(client, message):
             )
             return
 
+        # Send welcome message with image and navigation buttons
         buttons = [
             [InlineKeyboardButton("Profile", callback_data="profile")],
             [InlineKeyboardButton("Withdraw", callback_data="withdraw")],
             [InlineKeyboardButton("Invite Link", callback_data="invite")]
         ]
-        await message.reply(
-            "Use the buttons below to navigate.",
+        await client.send_photo(
+            chat_id=user_id,
+            photo=START_IMAGE_URL,
+            caption="Welcome! Use the buttons below to navigate.",
             reply_markup=InlineKeyboardMarkup(buttons)
         )
     except Exception as e:
