@@ -49,7 +49,9 @@ async def show_main_menu(client, message, user_id, username):
         [InlineKeyboardButton("Withdraw", callback_data="withdraw")],
         [InlineKeyboardButton("Invite Link", callback_data="invite")]
     ]
-    await message.edit(
+    # Delete the current message (which is text) and send a new photo message
+    await message.delete()
+    await message.reply_photo(
         photo="https://i.imghippo.com/files/fgmj5944fE.jpg",
         caption=f"Welcome, @{username}!\nUse the buttons below to navigate.",
         reply_markup=InlineKeyboardMarkup(buttons)
