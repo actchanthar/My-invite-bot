@@ -2,6 +2,7 @@ import logging
 import base64
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.enums import ChatMemberStatus  # Import the enum
 from config import FORCE_SUB_CHANNELS
 from database.database import Database
 
@@ -31,8 +32,8 @@ async def check_subscription(client, user_id):
             continue
         try:
             member = await client.get_chat_member(channel_id, user_id)
-            # Treat 'member' status as subscribed
-            if member.status not in ["member", "administrator", "creator", "restricted"]:
+            # Compare using the ChatMemberStatus enum directly
+            if member.status not in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR, ChatMemberStatus.RESTRICTED]:
                 logger.info(f"User {user_id} not subscribed to {channel_id}, status: {member.status}")
                 return False
             logger.info(f"User {user_id} is subscribed to {channel_id}, status: {member.status}")
