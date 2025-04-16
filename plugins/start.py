@@ -1,4 +1,5 @@
 import logging
+import base64
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from config import FORCE_SUB_CHANNELS
@@ -30,34 +31,42 @@ async def check_subscription(client, user_id):
             continue
         try:
             member = await client.get_chat_member(channel_id, user_id)
-            # Include 'restricted' status to handle cases where users are in the channel but restricted
+            # Treat 'member' status as subscribed
             if member.status not in ["member", "administrator", "creator", "restricted"]:
                 logger.info(f"User {user_id} not subscribed to {channel_id}, status: {member.status}")
                 return False
             logger.info(f"User {user_id} is subscribed to {channel_id}, status: {member.status}")
         except Exception as e:
             logger.error(f"Error checking subscription for {channel_id}: {e}")
-            # If there's an error (e.g., bot lacks permissions), assume user is not subscribed
             return False
     return True
 
 async def handle_start(client, message):
     user_id = message.from_user.id
     username = message.from_user.username or "Unknown"
-    referral_id = message.command[1] if len(message.command) > 1 else None
+    referral_id = None
 
-    logger.info(f"Handling /start for user {user_id}, referral_id: {referral_id}")
+    logger.info(f"Handling /start for user {user_id}, referral_id: {message.command[1] if len(message.command) > 1 else None}")
+
+    if len(message.command) > 1:
+        encoded_referral = message.command[1]
+        try:
+            # Decode the Base64-encoded referral ID
+            decoded_referral = base64.b64decode(encoded_referral).decode('utf-8')
+            # Extract the actual referral ID (assuming format like "get-<referrer_id>")
+            if decoded_referral.startswith("get-"):
+                referral_id = int(decoded_referral.split("-")[1])
+            else:
+                logger.warning(f"Invalid referral format for user {user_id}: {decoded_referral}")
+        except (base64.binascii.Error, ValueError) as e:
+            logger.error(f"Error decoding referral for user {user_id}: {e}")
 
     if await db.get_user(user_id) is None:
         await db.add_user(user_id, username, referral_id)
         if referral_id:
             try:
-                # Validate referral_id is numeric
-                if referral_id.isdigit():
-                    await db.update_referrals(int(referral_id))
-                    logger.info(f"Processed referral for {referral_id}")
-                else:
-                    logger.warning(f"Invalid referral_id: {referral_id}")
+                await db.update_referrals(referral_id)
+                logger.info(f"Processed referral for {referral_id}")
             except Exception as e:
                 logger.error(f"Error processing referral {referral_id}: {e}")
 
