@@ -43,6 +43,18 @@ async def check_subscription(client, user_id):
             return False
     return True
 
+async def show_main_menu(client, message, user_id, username):
+    buttons = [
+        [InlineKeyboardButton("Profile", callback_data="profile")],
+        [InlineKeyboardButton("Withdraw", callback_data="withdraw")],
+        [InlineKeyboardButton("Invite Link", callback_data="invite")]
+    ]
+    await message.edit(
+        photo="https://i.imghippo.com/files/fgmj5944fE.jpg",
+        caption=f"Welcome, @{username}!\nUse the buttons below to navigate.",
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
+
 async def handle_start(client, message):
     user_id = message.from_user.id
     username = message.from_user.username or "Unknown"
@@ -119,3 +131,10 @@ async def check_sub_callback(client, callback_query):
         await handle_start(client, message)
     else:
         await callback_query.answer("You haven't joined all channels yet!")
+
+async def back_to_menu_callback(client, callback_query):
+    user_id = callback_query.from_user.id
+    username = callback_query.from_user.username or "Unknown"
+    logger.info(f"User {user_id} clicked back to menu")
+    await show_main_menu(client, callback_query.message, user_id, username)
+    await callback_query.answer()
