@@ -68,6 +68,12 @@ async def deny_withdraw_callback(client, callback_query):
     logger.info(f"Deny withdraw callback for user {user_id} by admin {callback_query.from_user.id}")
     await deny_withdraw_callback(client, callback_query, user_id)
 
+@app.on_callback_query(filters.regex("back_to_menu"))
+async def back_to_menu_callback(client, callback_query):
+    from plugins.start import back_to_menu_callback
+    logger.info(f"Back to menu callback from user {callback_query.from_user.id}")
+    await back_to_menu_callback(client, callback_query)
+
 @app.on_message(filters.command("stats") & filters.user(ADMIN_IDS))
 async def stats_command(client, message):
     from plugins.admin import handle_stats
