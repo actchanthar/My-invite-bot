@@ -31,30 +31,28 @@ async def handle_withdraw_callback(client, callback_query):
     try:
         user = await db.get_user(callback_query.from_user.id)
         if not user or user["earnings_mmk"] < DEFAULT_EARNINGS_MMK:
-            await callback_query.message.edit_text(
-                f"You need at least {DEFAULT_EARNINGS_MMK} MMK to withdraw! Current balance: {user['earnings_mmk'] if user else 0} MMK"
-            )
+            await callback_query.message.reply(f"You need at least {DEFAULT_EARNINGS_MMK} MMK to withdraw! Current balance: {user['earnings_mmk'] if user else 0} MMK")
             await callback_query.answer()
             return
         buttons = [
             [InlineKeyboardButton("KBZ Pay", callback_data="withdraw_kbz")],
             [InlineKeyboardButton("Wave Pay", callback_data="withdraw_wave")]
         ]
-        await callback_query.message.edit_text(
+        await callback_query.message.reply(
             "Choose your withdrawal method:",
             reply_markup=InlineKeyboardMarkup(buttons)
         )
         await callback_query.answer()
     except Exception as e:
         logger.error(f"Error in withdraw callback: {e}")
-        await callback_query.message.edit_text("Error processing withdrawal request. Please try again later.")
+        await callback_query.message.reply("Error processing withdrawal request. Please try again later.")
 
 async def withdraw_method_callback(client, callback_query, method):
     try:
         user_id = callback_query.from_user.id
         user = await db.get_user(user_id)
         if not user:
-            await callback_query.message.edit_text("User not found!")
+            await callback_query.message.reply("User not found!")
             await callback_query.answer()
             return
 
@@ -67,11 +65,11 @@ async def withdraw_method_callback(client, callback_query, method):
         # Store the pending withdrawal request in the database
         await db.add_pending_withdrawal(user_id, method, user["earnings_mmk"])
 
-        await callback_query.message.edit_text(prompt)
+        await callback_query.message.reply(prompt)
         await callback_query.answer()
     except Exception as e:
         logger.error(f"Error in withdraw method callback: {e}")
-        await callback_query.message.edit_text("Error sending withdrawal request. Please try again later.")
+        await callback_query.message.reply("Error sending withdrawal request. Please try again later.")
 
 async def handle_account_details(client, message):
     try:
@@ -126,12 +124,12 @@ async def approve_withdraw_callback(client, callback_query, user_id):
             return
         user = await db.get_user(user_id)
         if not user:
-            await callback_query.message.edit_text("User not found!")
+            await callback_query.message.reply("User not found!")
             await callback_query.answer()
             return
         pending_withdrawal = await db.get_pending_withdrawal(user_id)
         if not pending_withdrawal:
-            await callback_query.message.edit_text("No pending withdrawal request found for this user.")
+            await callback_query.message.reply("No pending withdrawal request found for this user.")
             await callback_query.answer()
             return
 
@@ -140,7 +138,7 @@ async def approve_withdraw_callback(client, callback_query, user_id):
         details = pending_withdrawal["details"]
 
         # Notify the admin to upload the receipt screenshot
-        await callback_query.message.edit_text(
+        await callback_query.message.reply(
             "Please upload the receipt screenshot for this withdrawal.",
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("Cancel", callback_data=f"cancel_withdraw_{user_id}")]
@@ -151,7 +149,7 @@ async def approve_withdraw_callback(client, callback_query, user_id):
         await callback_query.answer()
     except Exception as e:
         logger.error(f"Error in approve withdraw callback: {e}")
-        await callback_query.message.edit_text("Error approving withdrawal. Please try again later.")
+        await callback_query.message.reply("Error approving withdrawal. Please try again later.")
 
 async def handle_receipt_screenshot(client, message):
     try:
@@ -199,12 +197,12 @@ async def cancel_withdraw_callback(client, callback_query, user_id):
             return
         # Remove the pending withdrawal
         await db.remove_pending_withdrawal(user_id)
-        await callback_query.message.edit_text("Withdrawal request canceled.")
+        await callback_query.message.reply("Withdrawal request canceled.")
         await client.send_message(user_id, "Your withdrawal request was canceled by the admin.")
         await callback_query.answer()
     except Exception as e:
         logger.error(f"Error in cancel withdraw callback: {e}")
-        await callback_query.message.edit_text("Error canceling withdrawal. Please try again later.")
+        await callback_query.message.reply("Error canceling withdrawal. Please try again later.")
 
 async def deny_withdraw_callback(client, callback_query, user_id):
     try:
@@ -212,10 +210,10 @@ async def deny_withdraw_callback(client, callback_query, user_id):
             await callback_query.answer("Unauthorized!")
             return
         await client.send_message(user_id, "Your withdrawal request was denied by the admin.")
-        await callback_query.message.edit_text("Withdrawal denied.")
+        await callback_query.message.reply("Withdrawal denied.")
         # Remove the pending withdrawal
         await db.remove_pending_withdrawal(user_id)
         await callback_query.answer()
     except Exception as e:
         logger.error(f"Error in deny withdraw callback: {e}")
-        await callback_query.message.edit_text("Error denying withdrawal. Please try again later.")
+        await callback_query.message.reply("Error denying withdrawal. Please try again later.")
