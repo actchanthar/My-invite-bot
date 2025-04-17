@@ -10,7 +10,7 @@ from telegram.ext import (
 )
 from telegram.error import BadRequest
 from pymongo import MongoClient
-from pymongo.exceptions import ConnectionError
+from pymongo.errors import ConnectionError  # Fixed import (was pymongo.exceptions)
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
