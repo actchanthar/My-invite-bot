@@ -134,6 +134,12 @@ async def withdraw_command(client, message):
     logger.info(f"Withdraw command from user {message.from_user.id}")
     await handle_withdraw(client, message)
 
+@app.on_message(filters.command("myreferrals"))
+async def my_referrals_command(client, message):
+    from plugins.referral import my_referrals
+    logger.info(f"My referrals command from user {message.from_user.id}")
+    await my_referrals(client, message)
+
 if __name__ == "__main__":
     logger.info("Starting bot...")
     app.run()
