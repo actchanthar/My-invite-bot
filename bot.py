@@ -1,145 +1,227 @@
 import logging
-from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from config import API_ID, API_HASH, BOT_TOKEN, ADMIN_IDS
-from database.database import Database
+import asyncio
+from datetime import datetime
+from telegram import Update
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    ChatMemberHandler,
+    CallbackContext,
+)
+from telegram.error import BadRequest
+from pymongo import MongoClient
+from pymongo.errors import ConnectionError
 
-logging.basicConfig(level=logging.INFO)
+# Configure logging
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
-app = Client("my_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
-db = Database()
+# Bot configuration
+BOT_TOKEN = "YOUR_BOT_TOKEN"  # Replace with your bot token
+CHAT_ID = -1002097823468  # Chat ID for https://t.me/tiktokceleshd
+CHAT_INVITE_LINK = "https://t.me/tiktokceleshd"
+MONGO_URI = "mongodb://localhost:27017"  # Replace with your MongoDB URI
+DB_NAME = "bot_database"
+USERS_COLLECTION = "users"
+EARNINGS_PER_REFERRAL = 100  # MMK per valid referral, adjust as needed
+BOT_USERNAME = "@ITACTbot"  # Replace with your bot's username
 
-@app.on_message(filters.command("start"))
-async def start_command(client, message):
-    from plugins.start import handle_start
-    logger.info(f"Received /start from user {message.from_user.id}")
-    await handle_start(client, message)
+# Initialize MongoDB
+try:
+    client = MongoClient(MONGO_URI)
+    db = client[DB_NAME]
+    users_collection = db[USERS_COLLECTION]
+    # Create index for user_id
+    users_collection.create_index("user_id", unique=True)
+    logger.info("Connected to MongoDB")
+except ConnectionError as e:
+    logger.error(f"Failed to connect to MongoDB: {e}")
+    raise
 
-@app.on_callback_query(filters.regex("check_sub"))
-async def check_sub_callback(client, callback_query):
-    from plugins.start import check_subscription, handle_start
-    user_id = callback_query.from_user.id
-    logger.info(f"Checking subscription for user {user_id} via callback")
-    if await check_subscription(client, user_id):
-        logger.info(f"User {user_id} passed subscription check")
-        await callback_query.message.delete()
-        await handle_start(client, callback_query.message)
+async def start(update: Update, context: CallbackContext) -> None:
+    """Handle /start command, process referrals, and prompt chat join."""
+    user = update.effective_user
+    user_id = user.id
+    args = context.args  # Get referrer ID from /start <referrer_id>
+    referrer_id = int(args[0]) if args and args[0].isdigit() else None
+
+    # Check if user already exists in database
+    existing_user = users_collection.find_one({"user_id": user_id})
+    if not existing_user:
+        # Create new user entry
+        user_data = {
+            "user_id": user_id,
+            "username": user.username or "",
+            "referrals": 0,
+            "earnings_mmk": 0,
+            "referral_counter": 0,
+            "is_vip": False,
+            "joined_at": datetime.now(),
+            "referred_by": referrer_id
+        }
+        try:
+            users_collection.insert_one(user_data)
+            logger.info(f"New user {user_id} registered, referred_by: {referrer_id}")
+        except Exception as e:
+            logger.error(f"Error inserting user {user_id}: {e}")
+            await update.message.reply_text("An error occurred. Please try again later.")
+            return
     else:
-        logger.info(f"User {user_id} failed subscription check")
-        await callback_query.answer("You haven't joined all channels yet!")
+        # Update referred_by if not set and referrer_id is provided
+        if referrer_id and not existing_user.get("referred_by"):
+            try:
+                users_collection.update_one(
+                    {"user_id": user_id},
+                    {"$set": {"referred_by": referrer_id}}
+                )
+                logger.info(f"Updated user {user_id} with referrer {referrer_id}")
+            except Exception as e:
+                logger.error(f"Error updating user {user_id}: {e}")
+                await update.message.reply_text("An error occurred. Please try again later.")
+                return
 
-@app.on_callback_query(filters.regex("profile"))
-async def profile_callback(client, callback_query):
-    from plugins.referral import handle_profile_callback
-    logger.info(f"Profile callback from user {callback_query.from_user.id}")
-    await handle_profile_callback(client, callback_query)
+    # Increment referral_counter for referrer (tracks link clicks)
+    if referrer_id:
+        try:
+            users_collection.update_one(
+                {"user_id": referrer_id},
+                {"$inc": {"referral_counter": 1}}
+            )
+            logger.info(f"Incremented referral_counter for referrer {referrer_id}")
+        except Exception as e:
+            logger.error(f"Error updating referral_counter for referrer {referrer_id}: {e}")
 
-@app.on_callback_query(filters.regex("invite"))
-async def invite_callback(client, callback_query):
-    from plugins.referral import invite_callback
-    logger.info(f"Invite callback from user {callback_query.from_user.id}")
-    await invite_callback(client, callback_query)
+    # Check if user is in the chat
+    if await check_subscription(context.bot, user_id, CHAT_ID):
+        await update.message.reply_text("You're all set! Thanks for joining our channel.")
+        # Process referral if not already counted
+        await process_referral(user_id, referrer_id)
+    else:
+        await update.message.reply_text(
+            f"Welcome! Please join our channel to complete your referral: {CHAT_INVITE_LINK}\n"
+            f"Your referral link: {BOT_USERNAME}?start={user_id}"
+        )
 
-@app.on_callback_query(filters.regex("withdraw"))
-async def withdraw_callback(client, callback_query):
-    from plugins.withdrawal import handle_withdraw_callback
-    logger.info(f"Withdraw callback from user {callback_query.from_user.id}")
-    await handle_withdraw_callback(client, callback_query)
+async def getlink(update: Update, context: CallbackContext) -> None:
+    """Return the user's referral link."""
+    user_id = update.effective_user.id
+    user = users_collection.find_one({"user_id": user_id})
+    if not user:
+        await update.message.reply_text("Please start the bot first with /start.")
+        return
+    await update.message.reply_text(f"Your referral link: {BOT_USERNAME}?start={user_id}")
 
-@app.on_callback_query(filters.regex("withdraw_(kbz|wave)"))
-async def withdraw_method_callback(client, callback_query):
-    from plugins.withdrawal import withdraw_method_callback
-    method = "KBZ Pay" if callback_query.data == "withdraw_kbz" else "Wave Pay"
-    logger.info(f"Withdraw {method} callback from user {callback_query.from_user.id}")
-    await withdraw_method_callback(client, callback_query, method)
+async def check(update: Update, context: CallbackContext) -> None:
+    """Allow users to check their referral status."""
+    user_id = update.effective_user.id
+    try:
+        if await check_subscription(context.bot, user_id, CHAT_ID):
+            await update.message.reply_text("You're a member of the channel! Referral completed.")
+            # Check and process referral
+            user = users_collection.find_one({"user_id": user_id})
+            if user and user.get("referred_by"):
+                await process_referral(user_id, user["referred_by"])
+        else:
+            await update.message.reply_text(
+                f"Please join our channel to complete your referral: {CHAT_INVITE_LINK}"
+            )
+    except Exception as e:
+        logger.error(f"Error checking referral status for user {user_id}: {e}")
+        await update.message.reply_text("An error occurred. Please try again later.")
 
-@app.on_callback_query(filters.regex("approve_withdraw_"))
-async def approve_withdraw_callback(client, callback_query):
-    from plugins.withdrawal import approve_withdraw_callback
-    user_id = int(callback_query.data.split("_")[-1])
-    logger.info(f"Approve withdraw callback for user {user_id} by admin {callback_query.from_user.id}")
-    await approve_withdraw_callback(client, callback_query, user_id)
+async def check_subscription(bot, user_id: int, chat_id: int) -> bool:
+    """Check if a user is a member of the chat with retry logic."""
+    for attempt in range(3):  # Retry up to 3 times
+        try:
+            chat_member = await bot.get_chat_member(chat_id, user_id)
+            if chat_member.status in ["member", "administrator", "creator"]:
+                return True
+            return False
+        except BadRequest as e:
+            if "USER_NOT_PARTICIPANT" in str(e):
+                logger.info(f"User {user_id} not in chat {chat_id}")
+                return False
+            logger.warning(f"Error checking subscription for user {user_id}: {e}")
+            await asyncio.sleep(1)  # Wait before retrying
+    logger.error(f"Failed to check subscription for user {user_id} after retries")
+    return False
 
-@app.on_callback_query(filters.regex("deny_withdraw_"))
-async def deny_withdraw_callback(client, callback_query):
-    from plugins.withdrawal import deny_withdraw_callback
-    user_id = int(callback_query.data.split("_")[-1])
-    logger.info(f"Deny withdraw callback for user {user_id} by admin {callback_query.from_user.id}")
-    await deny_withdraw_callback(client, callback_query, user_id)
+async def process_referral(user_id: int, referrer_id: int) -> None:
+    """Process a referral and update referrer's stats if valid."""
+    if not referrer_id or user_id == referrer_id:  # Prevent self-referrals
+        return
 
-@app.on_callback_query(filters.regex("back_to_menu"))
-async def back_to_menu_callback(client, callback_query):
-    from plugins.start import back_to_menu_callback
-    logger.info(f"Back to menu callback from user {callback_query.from_user.id}")
-    await back_to_menu_callback(client, callback_query)
+    # Check if referral already counted
+    user = users_collection.find_one({"user_id": user_id})
+    if user and user.get("referral_counted"):
+        return
 
-@app.on_message(filters.command("stats") & filters.user(ADMIN_IDS))
-async def stats_command(client, message):
-    from plugins.admin import handle_stats
-    logger.info(f"Stats command from admin {message.from_user.id}")
-    await handle_stats(client, message)
+    # Verify user is in chat
+    if await check_subscription(context.bot, user_id, CHAT_ID):
+        try:
+            # Mark referral as counted
+            users_collection.update_one(
+                {"user_id": user_id},
+                {"$set": {"referral_counted": True}}
+            )
+            # Update referrer's referrals and earnings
+            users_collection.update_one(
+                {"user_id": referrer_id},
+                {"$inc": {"referrals": 1, "earnings_mmk": EARNINGS_PER_REFERRAL}}
+            )
+            logger.info(f"Referral counted for referrer {referrer_id}, user {user_id}")
+        except Exception as e:
+            logger.error(f"Error updating referral for referrer {referrer_id}: {e}")
+            raise
 
-@app.on_message(filters.command("broadcast") & filters.user(ADMIN_IDS))
-async def broadcast_command(client, message):
-    from plugins.admin import handle_broadcast
-    logger.info(f"Broadcast command from admin {message.from_user.id}")
-    await handle_broadcast(client, message)
+async def chat_member_update(update: Update, context: CallbackContext) -> None:
+    """Handle chat member updates to detect when users join the chat."""
+    member = update.chat_member
+    if not member:
+        return
 
-@app.on_message(filters.command("ban_user") & filters.user(ADMIN_IDS))
-async def ban_user_command(client, message):
-    from plugins.admin import handle_ban_user
-    logger.info(f"Ban user command from admin {message.from_user.id}")
-    await handle_ban_user(client, message)
+    chat_id = member.chat.id
+    user_id = member.new_chat_member.user.id
+    status = member.new_chat_member.status
 
-@app.on_message(filters.command("unban_user") & filters.user(ADMIN_IDS))
-async def unban_user_command(client, message):
-    from plugins.admin import handle_unban_user
-    logger.info(f"Unban user command from admin {message.from_user.id}")
-    await handle_unban_user(client, message)
+    if chat_id == CHAT_ID and status in ["member", "administrator", "creator"]:
+        logger.info(f"User {user_id} joined chat {chat_id}")
+        # Find referrer
+        try:
+            user = users_collection.find_one({"user_id": user_id})
+            if user and user.get("referred_by"):
+                await process_referral(user_id, user["referred_by"])
+                await context.bot.send_message(
+                    user_id,
+                    "Thanks for joining the channel! Your referral is complete."
+                )
+        except Exception as e:
+            logger.error(f"Error processing chat member update for user {user_id}: {e}")
 
-@app.on_message(filters.command("banned_users") & filters.user(ADMIN_IDS))
-async def banned_users_command(client, message):
-    from plugins.admin import handle_banned_users
-    logger.info(f"Banned users command from admin {message.from_user.id}")
-    await handle_banned_users(client, message)
+async def error_handler(update: Update, context: CallbackContext) -> None:
+    """Handle errors, including database or API issues."""
+    logger.error(f"Update {update} caused error: {context.error}")
+    if update and update.effective_message:
+        await update.effective_message.reply_text(
+            "An error occurred. Please try again later."
+        )
 
-@app.on_message(filters.command("users") & filters.user(ADMIN_IDS))
-async def users_command(client, message):
-    from plugins.admin import handle_users
-    logger.info(f"Users command from admin {message.from_user.id}")
-    await handle_users(client, message)
+def main() -> None:
+    """Run the bot."""
+    application = Application.builder().token(BOT_TOKEN).build()
 
-@app.on_message(filters.command("set_vip") & filters.user(ADMIN_IDS))
-async def set_vip_command(client, message):
-    from plugins.admin import handle_set_vip
-    logger.info(f"Set VIP command from admin {message.from_user.id}")
-    await handle_set_vip(client, message)
+    # Add handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("check", check))
+    application.add_handler(CommandHandler("getlink", getlink))
+    application.add_handler(ChatMemberHandler(chat_member_update, ChatMemberHandler.CHAT_MEMBER))
+    application.add_error_handler(error_handler)
 
-@app.on_message(filters.command("add_bonus") & filters.user(ADMIN_IDS))
-async def add_bonus_command(client, message):
-    from plugins.admin import handle_add_bonus
-    logger.info(f"Add bonus command from admin {message.from_user.id}")
-    await handle_add_bonus(client, message)
-
-@app.on_message(filters.command("profile"))
-async def profile_command(client, message):
-    from plugins.referral import handle_profile
-    logger.info(f"Profile command from user {message.from_user.id}")
-    await handle_profile(client, message)
-
-@app.on_message(filters.command("withdraw"))
-async def withdraw_command(client, message):
-    from plugins.withdrawal import handle_withdraw
-    logger.info(f"Withdraw command from user {message.from_user.id}")
-    await handle_withdraw(client, message)
-
-@app.on_message(filters.command("myreferrals"))
-async def my_referrals_command(client, message):
-    from plugins.referral import my_referrals
-    logger.info(f"My referrals command from user {message.from_user.id}")
-    await my_referrals(client, message)
+    # Start the bot
+    logger.info("Starting bot")
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
-    logger.info("Starting bot...")
-    app.run()
+    main()
