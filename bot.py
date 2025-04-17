@@ -1,3 +1,4 @@
+import os
 import logging
 import asyncio
 from datetime import datetime
@@ -9,31 +10,29 @@ from telegram.ext import (
     CallbackContext,
 )
 from telegram.error import BadRequest
-from pymongo import MongoClient
-from pymongo.errors import ConnectionError  # Fixed import (was pymongo.exceptions)
+from Database import Database
+import config  # Import config
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-BOT_TOKEN = "YOUR_BOT_TOKEN"
+BOT_TOKEN = config.BOT_TOKEN
 CHAT_ID = -1002097823468
 CHAT_INVITE_LINK = "https://t.me/tiktokceleshd"
-MONGO_URI = "mongodb+srv://<user>:<password>@<cluster>.mongodb.net/<dbname>?retryWrites=true&w=majority"
-DB_NAME = "bot_database"
+MONGO_URI = config.MONGO_URI
+DB_NAME = "bot_db"
 USERS_COLLECTION = "users"
-EARNINGS_PER_REFERRAL = 100
+EARNINGS_PER_REFERRAL = config.DEFAULT_EARNINGS_MMK  # Use config value (20)
 BOT_USERNAME = "@ITACTbot"
 
+# Initialize Database
 try:
-    client = MongoClient(MONGO_URI)
-    db = client[DB_NAME]
-    users_collection = db[USERS_COLLECTION]
-    users_collection.create_index("user_id", unique=True)
-    logger.info("Connected to MongoDB")
-except ConnectionError as e:
-    logger.error(f"Failed to connect to MongoDB: {e}")
+    db = Database()
+    logger.info("Initialized Database connection")
+except Exception as e:
+    logger.error(f"Failed to initialize Database: {e}")
     raise
 
 async def start(update: Update, context: CallbackContext) -> None:
@@ -42,29 +41,19 @@ async def start(update: Update, context: CallbackContext) -> None:
     args = context.args
     referrer_id = int(args[0]) if args and args[0].isdigit() else None
 
-    existing_user = users_collection.find_one({"user_id": user_id})
+    existing_user = await db.get_user(user_id)
     if not existing_user:
-        user_data = {
-            "user_id": user_id,
-            "username": user.username or "",
-            "referrals": 0,
-            "earnings_mmk": 0,
-            "referral_counter": 0,
-            "is_vip": False,
-            "joined_at": datetime.now(),
-            "referred_by": referrer_id
-        }
         try:
-            users_collection.insert_one(user_data)
+            await db.add_user(user_id, user.username or "", referred_by=referrer_id)
             logger.info(f"New user {user_id} registered, referred_by: {referrer_id}")
         except Exception as e:
-            logger.error(f"Error inserting user {user_id}: {e}")
+            logger.error(f"Error adding user {user_id}: {e}")
             await update.message.reply_text("An error occurred. Please try again later.")
             return
     else:
         if referrer_id and not existing_user.get("referred_by"):
             try:
-                users_collection.update_one(
+                await db.users.update_one(
                     {"user_id": user_id},
                     {"$set": {"referred_by": referrer_id}}
                 )
@@ -76,17 +65,14 @@ async def start(update: Update, context: CallbackContext) -> None:
 
     if referrer_id:
         try:
-            users_collection.update_one(
-                {"user_id": referrer_id},
-                {"$inc": {"referral_counter": 1}}
-            )
+            await db.increment_referral_counter(referrer_id)
             logger.info(f"Incremented referral_counter for referrer {referrer_id}")
         except Exception as e:
             logger.error(f"Error updating referral_counter for referrer {referrer_id}: {e}")
 
     if await check_subscription(context.bot, user_id, CHAT_ID):
         await update.message.reply_text("You're all set! Thanks for joining our channel.")
-        await process_referral(user_id, referrer_id)
+        await process_referral(user_id, referrer_id, context)
     else:
         await update.message.reply_text(
             f"Welcome! Please join our channel to complete your referral: {CHAT_INVITE_LINK}\n"
@@ -95,7 +81,7 @@ async def start(update: Update, context: CallbackContext) -> None:
 
 async def getlink(update: Update, context: CallbackContext) -> None:
     user_id = update.effective_user.id
-    user = users_collection.find_one({"user_id": user_id})
+    user = await db.get_user(user_id)
     if not user:
         await update.message.reply_text("Please start the bot first with /start.")
         return
@@ -106,9 +92,9 @@ async def check(update: Update, context: CallbackContext) -> None:
     try:
         if await check_subscription(context.bot, user_id, CHAT_ID):
             await update.message.reply_text("You're a member of the channel! Referral completed.")
-            user = users_collection.find_one({"user_id": user_id})
+            user = await db.get_user(user_id)
             if user and user.get("referred_by"):
-                await process_referral(user_id, user["referred_by"])
+                await process_referral(user_id, user["referred_by"], context)
         else:
             await update.message.reply_text(
                 f"Please join our channel to complete your referral: {CHAT_INVITE_LINK}"
@@ -133,28 +119,25 @@ async def check_subscription(bot, user_id: int, chat_id: int) -> bool:
     logger.error(f"Failed to check subscription for user {user_id} after retries")
     return False
 
-async def process_referral(user_id: int, referrer_id: int) -> None:
+async def process_referral(user_id: int, referrer_id: int, context: CallbackContext) -> None:
     if not referrer_id or user_id == referrer_id:
         return
 
-    user = users_collection.find_one({"user_id": user_id})
+    user = await db.get_user(user_id)
     if user and user.get("referral_counted"):
         return
 
-    if await check_subscription(context.bot, user_id, CHAT_ID):
-        try:
-            users_collection.update_one(
+    try:
+        if await check_subscription(context.bot, user_id, CHAT_ID):
+            await db.users.update_one(
                 {"user_id": user_id},
                 {"$set": {"referral_counted": True}}
             )
-            users_collection.update_one(
-                {"user_id": referrer_id},
-                {"$inc": {"referrals": 1, "earnings_mmk": EARNINGS_PER_REFERRAL}}
-            )
+            await db.update_referrals(referrer_id)
             logger.info(f"Referral counted for referrer {referrer_id}, user {user_id}")
-        except Exception as e:
-            logger.error(f"Error updating referral for referrer {referrer_id}: {e}")
-            raise
+    except Exception as e:
+        logger.error(f"Error updating referral for referrer {referrer_id}: {e}")
+        raise
 
 async def chat_member_update(update: Update, context: CallbackContext) -> None:
     member = update.chat_member
@@ -168,9 +151,9 @@ async def chat_member_update(update: Update, context: CallbackContext) -> None:
     if chat_id == CHAT_ID and status in ["member", "administrator", "creator"]:
         logger.info(f"User {user_id} joined chat {chat_id}")
         try:
-            user = users_collection.find_one({"user_id": user_id})
+            user = await db.get_user(user_id)
             if user and user.get("referred_by"):
-                await process_referral(user_id, user["referred_by"])
+                await process_referral(user_id, user["referred_by"], context)
                 await context.bot.send_message(
                     user_id,
                     "Thanks for joining the channel! Your referral is complete."
