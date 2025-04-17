@@ -81,15 +81,28 @@ async def handle_start(client, message):
 
     user = await db.get_user(user_id)
     if user is None:
+        logger.info(f"Adding new user {user_id} with referrer {referral_id}")
         await db.add_user(user_id, username, referral_id)
         if referral_id:
             try:
                 await db.update_referrals(referral_id)
-                logger.info(f"Processed referral for {referral_id}")
+                logger.info(f"Successfully processed referral for referrer {referral_id} from new user {user_id}")
             except Exception as e:
-                logger.error(f"Error processing referral {referral_id}: {e}")
+                logger.error(f"Error processing referral for referrer {referral_id} from user {user_id}: {e}")
     else:
         logger.info(f"User {user_id} already exists: {user}")
+        if referral_id and user.get("referred_by") is None:
+            # Optionally update the referred_by field for existing users and count the referral
+            logger.info(f"Existing user {user_id} used referral from {referral_id}, updating referred_by")
+            await db.users.update_one(
+                {"user_id": user_id},
+                {"$set": {"referred_by": referral_id}}
+            )
+            try:
+                await db.update_referrals(referral_id)
+                logger.info(f"Successfully processed referral for referrer {referral_id} from existing user {user_id}")
+            except Exception as e:
+                logger.error(f"Error processing referral for referrer {referral_id} from existing user {user_id}: {e}")
 
     if not await check_subscription(client, user_id):
         buttons = []
