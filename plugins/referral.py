@@ -106,3 +106,34 @@ async def invite_callback(client, callback_query):
     except Exception as e:
         logger.error(f"Error in invite callback for user {user_id}: {e}")
         await callback_query.message.reply("Error generating invite link. Please try again later.")
+
+async def my_referrals(client, message):
+    try:
+        user_id = message.from_user.id
+        # Find all users who were referred by this user
+        referred_users = await db.users.find({"referred_by": user_id}).to_list(None)
+        if not referred_users:
+            await message.reply("You have not referred any users yet.")
+            return
+
+        # Construct the response
+        response = f"**Users You Referred**\n\nTotal: {len(referred_users)}\n\n"
+        for user in referred_users:
+            response += (
+                f"User ID: {user['user_id']}\n"
+                f"Username: @{user['username']}\n"
+                f"Joined: {user['joined_at'].strftime('%Y-%m-%d %H:%M:%S')}\n"
+                f"---\n"
+            )
+
+        # Split the response if it's too long for a single message
+        if len(response) > 4096:  # Telegram message length limit
+            parts = [response[i:i + 4096] for i in range(0, len(response), 4096)]
+            for part in parts:
+                await message.reply(part)
+        else:
+            await message.reply(response)
+
+    except Exception as e:
+        logger.error(f"Error in my_referrals for user {user_id}: {e}", exc_info=True)
+        await message.reply("Error fetching your referrals. Please try again later.")
