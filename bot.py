@@ -10,7 +10,7 @@ from telegram.ext import (
 )
 from telegram.error import BadRequest
 from pymongo import MongoClient
-from pymongo.errors import ConnectionError
+from pymongo.exceptions import ConnectionError  # Updated import
 
 # Configure logging
 logging.basicConfig(
@@ -204,7 +204,7 @@ async def error_handler(update: Update, context: CallbackContext) -> None:
     """Handle errors, including database or API issues."""
     logger.error(f"Update {update} caused error: {context.error}")
     if update and update.effective_message:
-        await update.effective_message.reply_text(
+        await update.message.reply_text(
             "An error occurred. Please try again later."
         )
 
