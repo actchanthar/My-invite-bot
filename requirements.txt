@@ -1,2 +1,2 @@
 python-telegram-bot==20.7
-pymongo==4.6.1  # Use a version that supports pymongo.exceptions (4.x series)
+pymongo==4.8.0
