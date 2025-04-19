@@ -173,29 +173,4 @@ async def chat_member_update(update: Update, context: CallbackContext) -> None:
                 await process_referral(user_id, user["referred_by"])
                 await context.bot.send_message(
                     user_id,
-                    "Thanks for joining the channel! Your referral is complete."
-                )
-        except Exception as e:
-            logger.error(f"Error processing chat member update for user {user_id}: {e}")
-
-async def error_handler(update: Update, context: CallbackContext) -> None:
-    logger.error(f"Update {update} caused error: {context.error}")
-    if update and update.effective_message:
-        await update.message.reply_text(
-            "An error occurred. Please try again later."
-        )
-
-def main() -> None:
-    application = Application.builder().token(BOT_TOKEN).build()
-
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("check", check))
-    application.add_handler(CommandHandler("getlink", getlink))
-    application.add_handler(ChatMemberHandler(chat_member_update, ChatMemberHandler.CHAT_MEMBER))
-    application.add_error_handler(error_handler)
-
-    logger.info("Starting bot")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
-
-if __name__ == "__main__":
-    main()
+                    "Thanks
