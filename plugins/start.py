@@ -2,7 +2,7 @@ import logging
 import base64
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from pyrogram.enums import ChatMemberStatus  # Import the enum
+from pyrogram.enums import ChatMemberStatus
 from config import FORCE_SUB_CHANNELS
 from database.database import Database
 
@@ -12,19 +12,17 @@ logger = logging.getLogger(__name__)
 db = Database()
 
 async def resolve_channel_id(client, channel):
-    """Resolve a channel username or ID to a chat ID."""
     try:
         if isinstance(channel, str) and channel.startswith("@"):
             chat = await client.get_chat(channel)
             logger.info(f"Resolved {channel} to chat ID {chat.id}")
             return chat.id
-        return int(channel)  # Assume it's already a chat ID
+        return int(channel)
     except Exception as e:
         logger.error(f"Error resolving channel {channel}: {e}")
         return None
 
 async def check_subscription(client, user_id):
-    """Check if a user is subscribed to all required channels."""
     for channel in FORCE_SUB_CHANNELS:
         channel_id = await resolve_channel_id(client, channel)
         if not channel_id:
@@ -32,7 +30,6 @@ async def check_subscription(client, user_id):
             continue
         try:
             member = await client.get_chat_member(channel_id, user_id)
-            # Compare using the ChatMemberStatus enum directly
             if member.status not in [ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.CREATOR, ChatMemberStatus.RESTRICTED]:
                 logger.info(f"User {user_id} not subscribed to {channel_id}, status: {member.status}")
                 return False
@@ -52,9 +49,7 @@ async def handle_start(client, message):
     if len(message.command) > 1:
         encoded_referral = message.command[1]
         try:
-            # Decode the Base64-encoded referral ID
             decoded_referral = base64.b64decode(encoded_referral).decode('utf-8')
-            # Extract the actual referral ID (assuming format like "get-<referrer_id>")
             if decoded_referral.startswith("get-"):
                 referral_id = int(decoded_referral.split("-")[1])
             else:
@@ -78,7 +73,6 @@ async def handle_start(client, message):
             if channel_id:
                 try:
                     chat = await client.get_chat(channel_id)
-                    # Use username for public channels, invite link for private ones
                     invite_link = f"https://t.me/{chat.username}" if chat.username else await client.export_chat_invite_link(channel_id)
                     buttons.append([InlineKeyboardButton(f"Join {chat.title or 'Channel'}", url=invite_link)])
                     logger.info(f"Generated join button for {channel_id}: {invite_link}")
@@ -108,7 +102,6 @@ async def check_sub_callback(client, callback_query):
     logger.info(f"Checking subscription for user {user_id} via callback")
     if await check_subscription(client, user_id):
         await callback_query.message.delete()
-        # Create a new message object to pass to handle_start
         message = callback_query.message
         message.from_user.id = user_id
         message.command = ["start"]
