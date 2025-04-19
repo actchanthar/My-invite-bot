@@ -1,7 +1,7 @@
 import logging
 import secrets
 from motor.motor_asyncio import AsyncIOMotorClient
-from config import MONGO_URI, DEFAULT_EARNINGS_MMK  # Import DEFAULT_EARNINGS_MMK
+from config import MONGO_URI, DEFAULT_EARNINGS_MMK
 import datetime
 
 logging.basicConfig(level=logging.INFO)
@@ -47,7 +47,7 @@ class Database:
         try:
             await self.users.update_one(
                 {"user_id": referrer_id},
-                {"$inc": {"referrals": 1, "earnings_mmk": DEFAULT_EARNINGS_MMK}}  # Use config value (20)
+                {"$inc": {"referrals": 1, "earnings_mmk": DEFAULT_EARNINGS_MMK}}
             )
             logger.info(f"Updated referrals for user {referrer_id}")
         except Exception as e:
