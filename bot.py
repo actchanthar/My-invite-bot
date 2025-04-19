@@ -17,13 +17,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-BOT_TOKEN = "YOUR_BOT_TOKEN"
+BOT_TOKEN = "6977715954:AAGej0aBVKYrE3wLJGv4dKIts7wzG40o6eY"
 CHAT_ID = -1002097823468
 CHAT_INVITE_LINK = "https://t.me/tiktokceleshd"
-MONGO_URI = "mongodb+srv://<user>:<password>@<cluster>.mongodb.net/<dbname>?retryWrites=true&w=majority"
-DB_NAME = "bot_database"
+MONGO_URI = "mongodb+srv://act23:act23@cluster0.x1lrbcd.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
+DB_NAME = "actit"
 USERS_COLLECTION = "users"
-EARNINGS_PER_REFERRAL = 100
+EARNINGS_PER_REFERRAL = 25
 BOT_USERNAME = "@ITACTbot"
 
 try:
@@ -173,4 +173,29 @@ async def chat_member_update(update: Update, context: CallbackContext) -> None:
                 await process_referral(user_id, user["referred_by"])
                 await context.bot.send_message(
                     user_id,
-                    "Thanks
+                    "Thanks for joining the channel! Your referral is complete."
+                )
+        except Exception as e:
+            logger.error(f"Error processing chat member update for user {user_id}: {e}")
+
+async def error_handler(update: Update, context: CallbackContext) -> None:
+    logger.error(f"Update {update} caused error: {context.error}")
+    if update and update.effective_message:
+        await update.message.reply_text(
+            "An error occurred. Please try again later."
+        )
+
+def main() -> None:
+    application = Application.builder().token(BOT_TOKEN).build()
+
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("check", check))
+    application.add_handler(CommandHandler("getlink", getlink))
+    application.add_handler(ChatMemberHandler(chat_member_update, ChatMemberHandler.CHAT_MEMBER))
+    application.add_error_handler(error_handler)
+
+    logger.info("Starting bot")
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+if __name__ == "__main__":
+    main()
