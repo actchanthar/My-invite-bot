@@ -1,17 +1,6 @@
-# Python
+# .gitignore
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
-*.env
-
-# Editor files
-.vscode/
-.idea/
-
-# Misc
+.env
 *.log
-.DS_Store
+*.sqlite
