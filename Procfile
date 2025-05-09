@@ -1,1 +1,2 @@
-worker: python bot.py
+# Procfile
+worker: python3 bot.py
