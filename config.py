@@ -9,8 +9,8 @@ DAILY_WITHDRAWAL_LIMIT = 20000  # Daily withdrawal limit in MMK
 PER_REFERRAL_EARNING = 1  # Earnings per referral in MMK
 REFERRAL_THRESHOLD = 5  # Number of referrals needed for a bonus
 REFERRAL_REWARD = 2  # Bonus reward in MMK
-FORCE_SUB_IMAGE = "https://i.ibb.co/kK446BD/act.jpg"  # Used for subscription prompt
-START_IMAGE = "https://i.ibb.co/kK446BD/act.jpg"  # Used for /start command
+FORCE_SUB_IMAGE = "https://i.imghippo.com/files/cbg1841XQ.jpg"  # Used for subscription prompt
+START_IMAGE = "https://i.imghippo.com/files/nwh3547xM.jpg"  # Used for /start command
 REQUIRED_CHANNELS = [
     -1002141318176,  # ACT ANIME Hentai Offici
     -1002097823468,  # Tik Tok Cele Myanmar
