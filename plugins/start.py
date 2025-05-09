@@ -112,8 +112,9 @@ async def start(update: Update, context: CallbackContext):
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await update.message.reply_text(
-            "Please subscribe to the following channels to continue: 📢",
+        await update.message.reply_photo(
+            photo=FORCE_SUB_IMAGE,
+            caption="Please subscribe to the following channels to continue: 📢",
             reply_markup=reply_markup
         )
         return
@@ -132,6 +133,8 @@ async def start(update: Update, context: CallbackContext):
                     "balance": new_balance
                 })
                 try:
+                    # Round the new balance to 0 decimal places for the referral message
+                    rounded_balance = round(new_balance, 0)
                     await context.bot.send_message(
                         chat_id=LOG_CHANNEL,
                         text=(
@@ -139,23 +142,32 @@ async def start(update: Update, context: CallbackContext):
                             f"Referrer ID: {referrer_id}\n"
                             f"New User ID: {user_id}\n"
                             f"Reward: {PER_REFERRAL_EARNING} MMK\n"
-                            f"Referrer's New Balance: {new_balance} MMK\n"
+                            f"Referrer's New Balance: {rounded_balance} MMK\n"
                             f"Referrer's Total Referrals: {new_referrals}"
+                        )
+                    )
+                    # Send referral message to the referrer with rounded balance and smiley face
+                    await context.bot.send_message(
+                        chat_id=referrer_id,
+                        text=(
+                            f"🎉 A new user joined using your referral link! "
+                            f"You earned {PER_REFERRAL_EARNING} MMK. "
+                            f"Your new balance is {rounded_balance} MMK. 🙂"
                         )
                     )
                     logger.info(f"Logged referral for referrer {referrer_id} and new user {user_id}")
                 except Exception as e:
                     logger.error(f"Failed to send referral log to LOG_CHANNEL: {e}")
 
-    # Round balance and earnings to 2 decimal places (if you applied the rounding fix earlier)
-    balance = round(user.get("balance", 0), 2)
+    # Round balance and earnings to 0 decimal places for the welcome message
+    balance = round(user.get("balance", 0), 0)
     referrals = user.get("referrals", 0)
-    per_referral = round(user.get("per_referral_earning", PER_REFERRAL_EARNING), 2)
+    per_referral = round(user.get("per_referral_earning", PER_REFERRAL_EARNING), 0)
     referral_threshold = user.get("referral_threshold", REFERRAL_THRESHOLD)
-    referral_reward = round(user.get("referral_reward", REFERRAL_REWARD), 2)
-    total_referral_earnings = round(referrals * per_referral, 2)
-    bonus_earnings = round((referrals // referral_threshold) * referral_reward, 2)
-    total_earnings = round(total_referral_earnings + bonus_earnings, 2)
+    referral_reward = round(user.get("referral_reward", REFERRAL_REWARD), 0)
+    total_referral_earnings = round(referrals * per_referral, 0)
+    bonus_earnings = round((referrals // referral_threshold) * referral_reward, 0)
+    total_earnings = round(total_referral_earnings + bonus_earnings, 0)
 
     welcome_message = (
         f"Welcome back, {first_name} Sama! 👋\n\n"
@@ -179,4 +191,15 @@ async def start(update: Update, context: CallbackContext):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text(welcome_message, reply_markup=reply_markup)
+    try:
+        await update.message.reply_photo(
+            photo=START_IMAGE,
+            caption=welcome_message,
+            reply_markup=reply_markup
+        )
+    except Exception as e:
+        logger.error(f"Failed to send start image: {e}")
+        await update.message.reply_text(
+            welcome_message,
+            reply_markup=reply_markup
+        )
