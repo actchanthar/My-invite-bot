@@ -1,6 +1,7 @@
 # bot.py
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, CallbackContext, ChatMemberUpdatedHandler, ChatJoinRequestHandler
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, CallbackContext
+from telegram.ext import ChatMemberUpdatedHandler, ChatJoinRequestHandler  # Keep these for v20.0+
 from telegram.request import HTTPXRequest
 import logging
 from config import *
@@ -88,7 +89,7 @@ async def button_callback(update: Update, context: CallbackContext):
             "/start - ဘော့ကို စတင်ပါ 🚀\n"
             "/withdraw - ငွေထုတ်ပါ 💸\n"
             "/guide - ဘော့ကို ဘယ်လိုအသုံးပြုရမလဲ 📘\n"
-            "သင့်ရည်ညွှန်းလင့်ခ်ကို မျှဝေပြီး ဆုလာဘ်များ ရယူပါ။ 🔗"
+            "သင့်ရည်ညွှန်းလင့်ခ်ကို မျှဝေပြီး ဆုလာဘ်များ ရယူပါ�। 🔗"
         )
     elif data == "back":
         await start.start(update, context)
