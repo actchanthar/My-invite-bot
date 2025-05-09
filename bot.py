@@ -1,7 +1,6 @@
 # bot.py
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, CallbackContext
-from telegram.ext import ChatMemberUpdatedHandler, ChatJoinRequestHandler  # Keep these for v20.0+
 from telegram.request import HTTPXRequest
 import logging
 from config import *
@@ -131,7 +130,7 @@ async def button_callback(update: Update, context: CallbackContext):
                 reply_markup = InlineKeyboardMarkup(keyboard)
 
                 await query.message.edit_text(
-                    "ဆက်လက်အသုံးပြုရန် အောက်ပါ ချန်နယ်များသို့ ဝင်ရောက်ပါ။ 📢",
+                    "ဆက်လက်အသုံးပြုရန် အောက်ပါ ချန်နယ်များသို့ ဝင်ရောက်ပါ�। 📢",
                     reply_markup=reply_markup
                 )
 
@@ -158,8 +157,8 @@ def main():
     application.add_handler(MessageHandler(filters.TEXT | filters.PHOTO, withdrawal.handle_withdrawal_details))
     application.add_handler(CallbackQueryHandler(withdrawal.handle_admin_receipt, pattern=r'^(approve_withdrawal_|reject_withdrawal_)'))
     application.add_handler(CallbackQueryHandler(button_callback))
-    application.add_handler(ChatMemberUpdatedHandler(request_fsub.handle_chat_member_updated))
-    application.add_handler(ChatJoinRequestHandler(request_fsub.handle_join_request))
+    # Use MessageHandler for chat member updates
+    application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS | filters.StatusUpdate.LEFT_CHAT_MEMBER, request_fsub.handle_chat_member_updated))
 
     application.run_polling()
 
