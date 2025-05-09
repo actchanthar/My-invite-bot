@@ -3,6 +3,7 @@ from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import CallbackContext
 from config import *
 from database.database import get_user, update_user
+from helper_func import is_subscribed
 import logging
 from datetime import datetime, timezone
 
@@ -51,73 +52,52 @@ async def start(update: Update, context: CallbackContext):
         logger.error(f"Failed to send log message to LOG_CHANNEL: {e}")
 
     # Check subscription to required channels
-    all_subscribed = True
-    for channel_id in REQUIRED_CHANNELS:
-        try:
-            chat_member = await context.bot.get_chat_member(chat_id=channel_id, user_id=user_id)
-            if chat_member.status not in ["member", "administrator", "creator"]:
-                logger.info(f"User {user_id} not subscribed to channel {channel_id} during /start. Status: {chat_member.status}")
-                all_subscribed = False
-                break
-            else:
-                logger.info(f"User {user_id} is subscribed to channel {channel_id}. Status: {chat_member.status}")
-        except Exception as e:
-            logger.error(f"Error checking subscription for channel {channel_id} for user {user_id}: {e}")
-            all_subscribed = False
-            break
-
+    all_subscribed = await is_subscribed(context.bot, user_id)
     if not all_subscribed:
-        channel_links = {}
-        channel_names = {}
-        for channel_id in REQUIRED_CHANNELS:
+        channels = await db.show_channels()
+        unsubscribed_channels = []
+        for channel_id, invite_link in channels:
             try:
-                bot_member = await context.bot.get_chat_member(chat_id=channel_id, user_id=context.bot.id)
-                if bot_member.status not in ["member", "administrator", "creator"]:
-                    logger.warning(f"Bot is not a member of channel {channel_id}, cannot generate invite link")
-                    channel_links[channel_id] = "https://t.me/+error"
+                chat_member = await context.bot.get_chat_member(chat_id=channel_id, user_id=user_id)
+                if chat_member.status not in ["member", "administrator", "creator"]:
+                    unsubscribed_channels.append((channel_id, invite_link))
+            except Exception as e:
+                logger.error(f"Error checking subscription for channel {channel_id}: {e}")
+                unsubscribed_channels.append((channel_id, invite_link))
+
+        if unsubscribed_channels:
+            channel_links = {}
+            channel_names = {}
+            for channel_id, invite_link in unsubscribed_channels:
+                try:
+                    chat = await context.bot.get_chat(chat_id=channel_id)
+                    channel_names[channel_id] = chat.title or "Unknown Channel"
+                    channel_links[channel_id] = invite_link or f"https://t.me/c/{str(channel_id)[4:]}"
+                except Exception as e:
+                    logger.error(f"Error fetching channel name for {channel_id}: {e}")
                     channel_names[channel_id] = "Unknown Channel"
-                    continue
-            except Exception as e:
-                logger.error(f"Error checking bot membership in channel {channel_id}: {e}")
-                channel_links[channel_id] = "https://t.me/+error"
-                channel_names[channel_id] = "Unknown Channel"
-                continue
+                    channel_links[channel_id] = invite_link or f"https://t.me/c/{str(channel_id)[4:]}"
+
+            keyboard = [
+                [InlineKeyboardButton(channel_names[ch_id], url=channel_links[ch_id]) for ch_id, _ in unsubscribed_channels[i:i+2]]
+                for i in range(0, len(unsubscribed_channels), 2)
+            ]
+            keyboard.append([InlineKeyboardButton("Check Subscription ✅", callback_data="check_subscription")])
+            reply_markup = InlineKeyboardMarkup(keyboard)
 
             try:
-                chat = await context.bot.get_chat(chat_id=channel_id)
-                channel_names[channel_id] = chat.title or "Unknown Channel"
-                logger.info(f"Fetched name for channel {channel_id}: {channel_names[channel_id]}")
+                await update.message.reply_photo(
+                    photo=FORCE_SUB_IMAGE,
+                    caption="Please subscribe to the following channels to continue: 📢",
+                    reply_markup=reply_markup
+                )
             except Exception as e:
-                logger.error(f"Error fetching channel name for {channel_id}: {e}")
-                channel_names[channel_id] = "Unknown Channel"
-
-            try:
-                invite_link = await context.bot.export_chat_invite_link(chat_id=channel_id)
-                channel_links[channel_id] = invite_link
-                logger.info(f"Generated invite link for channel {channel_id}: {invite_link}")
-            except Exception as e:
-                logger.error(f"Error generating invite link for channel {channel_id}: {e}")
-                channel_links[channel_id] = "https://t.me/+error"
-
-        keyboard = [
-            [
-                InlineKeyboardButton(channel_names[REQUIRED_CHANNELS[0]], url=channel_links[REQUIRED_CHANNELS[0]]),
-                InlineKeyboardButton(channel_names[REQUIRED_CHANNELS[1]], url=channel_links[REQUIRED_CHANNELS[1]])
-            ],
-            [
-                InlineKeyboardButton(channel_names[REQUIRED_CHANNELS[2]], url=channel_links[REQUIRED_CHANNELS[2]]),
-                InlineKeyboardButton(channel_names[REQUIRED_CHANNELS[3]], url=channel_links[REQUIRED_CHANNELS[3]])
-            ],
-            [InlineKeyboardButton("Check Subscription ✅", callback_data="check_subscription")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        await update.message.reply_photo(
-            photo=FORCE_SUB_IMAGE,
-            caption="Please subscribe to the following channels to continue: 📢",
-            reply_markup=reply_markup
-        )
-        return
+                logger.error(f"Error sending Force-Sub image: {e}")
+                await update.message.reply_text(
+                    "Please subscribe to the following channels to continue: 📢",
+                    reply_markup=reply_markup
+                )
+            return
 
     # Handle referral if present
     args = context.args
@@ -133,7 +113,6 @@ async def start(update: Update, context: CallbackContext):
                     "balance": new_balance
                 })
                 try:
-                    # Round the new balance to 0 decimal places for the referral message
                     rounded_balance = round(new_balance, 0)
                     await context.bot.send_message(
                         chat_id=LOG_CHANNEL,
@@ -146,7 +125,6 @@ async def start(update: Update, context: CallbackContext):
                             f"Referrer's Total Referrals: {new_referrals}"
                         )
                     )
-                    # Send referral message to the referrer with rounded balance and smiley face
                     await context.bot.send_message(
                         chat_id=referrer_id,
                         text=(
@@ -159,7 +137,7 @@ async def start(update: Update, context: CallbackContext):
                 except Exception as e:
                     logger.error(f"Failed to send referral log to LOG_CHANNEL: {e}")
 
-    # Round balance and earnings to 0 decimal places for the welcome message
+    # Show welcome message
     balance = round(user.get("balance", 0), 0)
     referrals = user.get("referrals", 0)
     per_referral = round(user.get("per_referral_earning", PER_REFERRAL_EARNING), 0)
