@@ -1,0 +1,42 @@
+{
+  "name": "Anime ACT Bot",
+  "description": "A Telegram bot with referral and withdrawal features.",
+  "repository": "https://github.com/yourusername/anime-act-bot",
+  "env": {
+    "BOT_TOKEN": {
+      "description": "Telegram Bot Token",
+      "required": true
+    },
+    "MONGODB_URI": {
+      "description": "MongoDB URI",
+      "required": true
+    },
+    "APP_ID": {
+      "description": "Telegram App ID",
+      "required": true
+    },
+    "API_HASH": {
+      "description": "Telegram API Hash",
+      "required": true
+    },
+    "ADMIN_ID": {
+      "description": "Admin Telegram ID",
+      "required": true
+    },
+    "LOG_CHANNEL": {
+      "description": "Log Channel ID",
+      "required": true
+    },
+    "FORCE_SUB_CHANNELS": {
+      "description": "Force Sub Channel IDs (comma-separated)",
+      "required": true
+    }
+  },
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "free"
+    }
+  },
+  "stack": "heroku-22"
+}

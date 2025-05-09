@@ -1,0 +1,2 @@
+python-telegram-bot>=20.0
+motor>=3.5.1

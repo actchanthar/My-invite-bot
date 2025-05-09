@@ -1,0 +1,8 @@
+---
+
+### Setup Instructions
+
+1. **Create the Project Directory**:
+   ```bash
+   mkdir telegram-referral-bot
+   cd telegram-referral-bot
