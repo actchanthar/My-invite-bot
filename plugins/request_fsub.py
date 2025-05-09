@@ -1,6 +1,6 @@
 # plugins/request_fsub.py
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import CallbackContext, ChatMemberUpdatedHandler, ChatJoinRequestHandler
+from telegram.ext import CallbackContext
 from database.database import *
 from config import OWNER_ID
 import logging
@@ -154,23 +154,18 @@ async def change_force_sub_mode(update: Update, context: CallbackContext):
     )
 
 async def handle_chat_member_updated(update: Update, context: CallbackContext):
-    chat_member_updated = update.chat_member
-    chat_id = chat_member_updated.chat.id
+    message = update.message
+    if not message:
+        return
 
+    chat_id = message.chat.id
     if await reqChannel_exist(chat_id):
-        old_member = chat_member_updated.old_chat_member
-        if old_member and old_member.status == "member":
-            user_id = old_member.user.id
+        for member in message.new_chat_members or []:
+            if member.id == context.bot.id:
+                logger.info(f"Bot added to channel {chat_id}")
+                return
+        if message.left_chat_member:
+            user_id = message.left_chat_member.id
             if await req_user_exist(chat_id, user_id):
                 await del_req_user(chat_id, user_id)
                 logger.info(f"Removed join request for user {user_id} in channel {chat_id}")
-
-async def handle_join_request(update: Update, context: CallbackContext):
-    chat_join_request = update.chat_join_request
-    chat_id = chat_join_request.chat.id
-    user_id = chat_join_request.from_user.id
-
-    if await reqChannel_exist(chat_id):
-        if not await req_user_exist(chat_id, user_id):
-            await req_user(chat_id, user_id)
-            logger.info(f"Added join request for user {user_id} in channel {chat_id}")
