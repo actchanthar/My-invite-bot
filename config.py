@@ -1,5 +1,5 @@
 # config.py
-BOT_TOKEN = "6977715954:AAECQq816jtrfOHGml-Kk6FSEZzCHQkf-EY"
+BOT_TOKEN = "6977715954:AAHusYW02nqdi5l_GTds9BIDuGhRZt7ULyU"
 MONGODB_URI = "mongodb+srv://2234act:2234act@cluster0.rwjacbj.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
 LOG_CHANNEL = -1002555129360  # Adjust if different
 ADMIN_ID = 5062124930  # Your admin user ID
