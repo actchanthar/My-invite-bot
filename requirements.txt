@@ -1,2 +1,4 @@
+# requirements.txt
 python-telegram-bot>=20.0
 motor>=3.5.1
+httpx>=0.23.0
