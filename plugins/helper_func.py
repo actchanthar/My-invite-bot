@@ -2,7 +2,7 @@
 from telegram import Update
 from telegram.ext import CallbackContext
 from config import OWNER_ID
-from database.database import get_channel_mode, req_user_exist
+from database.database import get_channel_mode
 import logging
 import asyncio
 
@@ -25,11 +25,6 @@ async def is_subscribed(bot, user_id):
 
     for cid, _ in channel_ids:
         if not await is_sub(bot, user_id, cid):
-            mode = await get_channel_mode(cid)
-            if mode == "on":
-                await asyncio.sleep(2)
-                if await is_sub(bot, user_id, cid):
-                    continue
             return False
 
     return True
@@ -39,9 +34,5 @@ async def is_sub(bot, user_id, channel_id):
         member = await bot.get_chat_member(channel_id, user_id)
         return member.status in {"creator", "administrator", "member"}
     except Exception as e:
-        mode = await get_channel_mode(channel_id)
-        if mode == "on":
-            exists = await req_user_exist(channel_id, user_id)
-            return exists
         logger.error(f"Error checking subscription for user {user_id} in channel {channel_id}: {e}")
         return False
